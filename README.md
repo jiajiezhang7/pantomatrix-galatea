@@ -40,6 +40,7 @@ Helper scripts:
 
 - [`tools/bootstrap_emage_env.sh`](tools/bootstrap_emage_env.sh)
 - [`tools/download_emage_assets.py`](tools/download_emage_assets.py)
+- asset redownload reference: [`docs/external-assets-redownload.md`](docs/external-assets-redownload.md)
 
 ## Upstream Source Snapshots
 

@@ -21,6 +21,8 @@ third_party/PantoMatrix/beat2_tools/
 third_party/PantoMatrix/blender_assets/
 third_party/PantoMatrix_legacy/EMAGE/
 third_party/PantoMatrix_legacy/camenduru_emage/
+third_party/PantoMatrix_legacy/datasets/
+third_party/PantoMatrix_legacy/outputs/
 
 # Upstream source snapshots should stay lean: exclude bundled media/examples/checkpoints
 third_party/PantoMatrix/assets/
