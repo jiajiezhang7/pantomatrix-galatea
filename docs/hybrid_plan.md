@@ -83,5 +83,10 @@
 - 若需要继续自动出片，建议改走：
   - `EMAGE .npz -> 官方 SMPL-X Blender addon -> Blender 中的 SMPL-X角色渲染`
 
+当前进展：
+- 这条 `SMPL-X Blender addon` 降级路线已经在本工作区落地并验证。
+- 当前推荐的自动渲染方案见：
+  - `docs/blender-smplx-render.md`
+
 详细交接信息见：
 - `docs/retarget-handoff-2026-04-09.md`

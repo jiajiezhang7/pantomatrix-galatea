@@ -14,6 +14,10 @@ The `EMAGE -> Blender` path has been validated for:
 
 The `EMAGE .npz -> official SMPL-X Blender addon` link is supported by the addon itself.
 
+That fallback path is now implemented locally as an automated render pipeline:
+
+`EMAGE .npz -> Blender + SMPL-X addon -> MP4 with synced audio`
+
 The `EMAGE .npz -> BEAT_Avatars (HumGen) high-quality avatar` link is NOT currently automated and is now paused for manual follow-up work.
 
 ## What Was Verified
@@ -117,6 +121,10 @@ The following pipeline is feasible now:
 
 `EMAGE .npz -> SMPL-X addon -> Blender SMPL-X character -> render`
 
+The following pipeline is now implemented in this workspace:
+
+`EMAGE .npz -> Blender SMPL-X character -> preview + silent video + final MP4`
+
 The following pipeline is NOT yet solved:
 
 `EMAGE .npz -> HG/BEAT_Avatars high-quality character -> render`
@@ -184,6 +192,15 @@ These are not yet integrated in this workspace.
 - `demo_logs/blender_301_beat_avatars.log`
 - `demo_logs/blender_301_beat_objects.log`
 - `demo_logs/blender_data2video_text.log`
+- `demo_logs/blender_smplx/audio-demo-female.log`
+- `demo_logs/blender_smplx/audio-demo-male.log`
+
+### Implemented fallback route
+
+- `tools/bootstrap_blender_smplx_render.sh`
+- `tools/render_emage_smplx_video.py`
+- `tools/blender/render_emage_smplx_scene.py`
+- `docs/blender-smplx-render.md`
 
 ## Pause Condition
 

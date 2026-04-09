@@ -5,6 +5,7 @@ demo_logs/
 demo_artifacts/
 demo_assets/
 data/blender_smoke/
+data/blender_renders_smplx/*/work/
 
 # Python cache
 __pycache__/

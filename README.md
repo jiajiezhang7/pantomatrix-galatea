@@ -40,6 +40,8 @@ Helper scripts:
 
 - [`tools/bootstrap_emage_env.sh`](tools/bootstrap_emage_env.sh)
 - [`tools/download_emage_assets.py`](tools/download_emage_assets.py)
+- [`tools/bootstrap_blender_smplx_render.sh`](tools/bootstrap_blender_smplx_render.sh)
+- [`tools/render_emage_smplx_video.py`](tools/render_emage_smplx_video.py)
 - asset redownload reference: [`docs/external-assets-redownload.md`](docs/external-assets-redownload.md)
 
 ## Upstream Source Snapshots
@@ -57,4 +59,5 @@ The exact snapshot commits and local compatibility notes are recorded in:
 
 - [`docs/emage_plan.md`](docs/emage_plan.md)
 - [`docs/hybrid_plan.md`](docs/hybrid_plan.md)
+- [`docs/blender-smplx-render.md`](docs/blender-smplx-render.md)
 - [`docs/retarget-handoff-2026-04-09.md`](docs/retarget-handoff-2026-04-09.md)
