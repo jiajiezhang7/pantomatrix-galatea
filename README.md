@@ -17,6 +17,34 @@ This repository intentionally does **not** include:
 - local debugging logs
 - Blender binaries
 
+## Hybrid Branch Focus
+
+The `hybrid/lam-emage-pipeline` branch is scoped around a hybrid output contract:
+
+- keep `EMAGE` as the body baseline
+- switch the current main face path to `LAM_Audio2Expression` ARKit coefficients
+- use the eye-related ARKit coefficients already present in `LAM_Audio2Expression` output instead of maintaining a separate eye module
+
+Implementation note:
+
+- the hybrid orchestrator now routes face generation through a provider boundary (`--face-provider`) so `LAM_Audio2Expression` can be replaced later by another face module such as `NVIDIA Audio2Face-3D` without rewriting the body / alignment / manifest pipeline.
+- the preferred provider-facing CLI is now the neutral `--face-*` option family (`--face-input-json`, `--face-command`, `--face-python`, `--face-repo`); legacy `--lam-*` flags remain as compatibility aliases.
+
+The branch-level execution contract, result folder layout, and environment matrix live in:
+
+- [`docs/hybrid_pipeline_guide.md`](docs/hybrid_pipeline_guide.md)
+- [`docs/lam_a2e_integration.md`](docs/lam_a2e_integration.md)
+
+Server-side showcase note:
+
+- when operating this branch over SSH, the official LAM WebGL avatar is now exported as an `mp4` through [`tools/render_hybrid_showcase_video.py`](tools/render_hybrid_showcase_video.py) using `Xvfb + Firefox`, instead of requiring an interactive browser tab
+- current example deliverable: `demo_artifacts/hybrid/hybrid_showcase_female_webgl.mp4`
+
+Important note:
+
+- [`tools/export_arkit_from_npz.py`](tools/export_arkit_from_npz.py) is retained only as a legacy/debug helper that approximates ARKit weights from EMAGE FLAME outputs. It is not the primary hybrid face path.
+- Viser-side flashing observed during hybrid validation was traced to player behavior, not hybrid body data. See [`docs/hybrid_pipeline_guide.md`](docs/hybrid_pipeline_guide.md) for the playback debugging note.
+
 ## Included Example Data
 
 The `data/` directory includes lightweight example artifacts that were produced locally and are small enough to share:
@@ -39,7 +67,9 @@ The following resources must be downloaded separately after clone:
 Helper scripts:
 
 - [`tools/bootstrap_emage_env.sh`](tools/bootstrap_emage_env.sh)
+- [`tools/bootstrap_lam_a2e_env.sh`](tools/bootstrap_lam_a2e_env.sh)
 - [`tools/download_emage_assets.py`](tools/download_emage_assets.py)
+- [`tools/download_lam_a2e_assets.py`](tools/download_lam_a2e_assets.py)
 - asset redownload reference: [`docs/external-assets-redownload.md`](docs/external-assets-redownload.md)
 
 ## Upstream Source Snapshots
@@ -57,4 +87,5 @@ The exact snapshot commits and local compatibility notes are recorded in:
 
 - [`docs/emage_plan.md`](docs/emage_plan.md)
 - [`docs/hybrid_plan.md`](docs/hybrid_plan.md)
+- [`docs/hybrid_pipeline_guide.md`](docs/hybrid_pipeline_guide.md)
 - [`docs/retarget-handoff-2026-04-09.md`](docs/retarget-handoff-2026-04-09.md)
