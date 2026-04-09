@@ -94,6 +94,8 @@ def configure_render(engine: str, device: str, width: int, height: int) -> None:
     scene.render.resolution_percentage = 100
     scene.render.film_transparent = False
     scene.render.image_settings.color_mode = "RGB"
+    scene.view_settings.exposure = -0.85
+    scene.view_settings.gamma = 1.0
 
     if engine == "CYCLES":
         chosen_device = configure_cycles_device(device)
@@ -131,8 +133,8 @@ def ensure_material(mesh_obj: bpy.types.Object) -> None:
     output.location = (300, 0)
     bsdf = material.node_tree.nodes.new(type="ShaderNodeBsdfPrincipled")
     bsdf.location = (0, 0)
-    bsdf.inputs["Base Color"].default_value = (0.57, 0.45, 0.38, 1.0)
-    bsdf.inputs["Roughness"].default_value = 0.7
+    bsdf.inputs["Base Color"].default_value = (0.41, 0.32, 0.27, 1.0)
+    bsdf.inputs["Roughness"].default_value = 0.84
     bsdf.inputs["Subsurface Weight"].default_value = 0.015
     material.node_tree.links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
@@ -153,9 +155,9 @@ def add_floor() -> None:
 
 def add_lights(target: Vector, height: float) -> None:
     lights = [
-        ("KeyLight", "AREA", (2.2, -3.0, height + 1.0), 1400),
-        ("FillLight", "AREA", (-2.6, -1.6, height + 0.6), 450),
-        ("RimLight", "AREA", (-1.2, 3.1, height + 1.5), 950),
+        ("KeyLight", "AREA", (2.2, -3.0, height + 1.0), 850),
+        ("FillLight", "AREA", (-2.6, -1.6, height + 0.6), 180),
+        ("RimLight", "AREA", (-1.2, 3.1, height + 1.5), 520),
     ]
     for name, light_type, location, energy in lights:
         light_data = bpy.data.lights.new(name=name, type=light_type)
@@ -195,7 +197,7 @@ def configure_world() -> None:
     world.use_nodes = True
     background = world.node_tree.nodes["Background"]
     background.inputs[0].default_value = (0.73, 0.74, 0.76, 1.0)
-    background.inputs[1].default_value = 0.32
+    background.inputs[1].default_value = 0.18
 
 
 def compute_body_target(mesh_obj: bpy.types.Object) -> tuple[Vector, float]:
