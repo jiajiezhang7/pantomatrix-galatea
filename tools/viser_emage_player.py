@@ -5,9 +5,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-import smplx
-import torch
-import viser
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,7 +21,33 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def compute_next_frame(current_frame: int, frame_count: int, loop: bool) -> int:
+    if frame_count <= 0:
+        return 0
+    if current_frame >= frame_count - 1:
+        return 0 if loop else frame_count - 1
+    return current_frame + 1
+
+
+def upsert_body_mesh(scene, mesh_holder: dict, vertices, faces, frame_idx: int) -> None:
+    handle = mesh_holder.get("handle")
+    frame_vertices = vertices[frame_idx]
+    if handle is None:
+        mesh_holder["handle"] = scene.add_mesh_simple(
+            "/emage_body",
+            vertices=frame_vertices,
+            faces=faces,
+            color=(120, 190, 255),
+        )
+        return
+
+    handle.vertices = frame_vertices
+
+
 def build_vertices(npz_path: Path, smplx_root: Path):
+    import smplx
+    import torch
+
     motion = np.load(npz_path, allow_pickle=True)
     poses = motion["poses"].astype(np.float32)
     trans = motion["trans"].astype(np.float32)
@@ -64,6 +87,8 @@ def build_vertices(npz_path: Path, smplx_root: Path):
 
 
 def main() -> int:
+    import viser
+
     args = parse_args()
     motion, vertices, faces = build_vertices(args.npz, args.smplx_root)
     fps = float(motion["mocap_frame_rate"]) if "mocap_frame_rate" in motion.files else 30.0
@@ -75,18 +100,18 @@ def main() -> int:
 
     frame_slider = server.gui.add_slider("frame", min=0, max=int(vertices.shape[0] - 1), step=1, initial_value=0)
     playing = server.gui.add_checkbox("play", initial_value=False)
+    looping = server.gui.add_checkbox("loop", initial_value=False)
     fps_slider = server.gui.add_slider("fps", min=1, max=60, step=1, initial_value=int(fps))
 
     mesh_holder = {"handle": None}
 
     def render_frame(frame_idx: int) -> None:
-        if mesh_holder["handle"] is not None:
-            mesh_holder["handle"].remove()
-        mesh_holder["handle"] = server.scene.add_mesh_simple(
-            "/emage_body",
-            vertices=vertices[frame_idx],
+        upsert_body_mesh(
+            scene=server.scene,
+            mesh_holder=mesh_holder,
+            vertices=vertices,
             faces=faces,
-            color=(120, 190, 255),
+            frame_idx=frame_idx,
         )
 
     @frame_slider.on_update
@@ -96,7 +121,11 @@ def main() -> int:
     def autoplay() -> None:
         while True:
             if playing.value:
-                next_frame = (int(frame_slider.value) + 1) % vertices.shape[0]
+                next_frame = compute_next_frame(
+                    current_frame=int(frame_slider.value),
+                    frame_count=vertices.shape[0],
+                    loop=bool(looping.value),
+                )
                 frame_slider.value = next_frame
             time.sleep(1.0 / max(1, int(fps_slider.value)))
 

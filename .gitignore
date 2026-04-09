@@ -20,6 +20,7 @@ third_party/PantoMatrix/hf_cache/
 third_party/PantoMatrix/emage_evaltools/
 third_party/PantoMatrix/beat2_tools/
 third_party/PantoMatrix/blender_assets/
+third_party/LAM_Audio2Expression/pretrained_models/
 third_party/PantoMatrix_legacy/EMAGE/
 third_party/PantoMatrix_legacy/camenduru_emage/
 third_party/PantoMatrix_legacy/datasets/
