@@ -43,6 +43,8 @@ Current local component entry points that remain relevant on this branch:
 - [`tools/bootstrap_a2f3d_sdk_env.sh`](../tools/bootstrap_a2f3d_sdk_env.sh) for the dedicated A2F conda env
 - [`tools/download_lam_a2e_assets.py`](../tools/download_lam_a2e_assets.py) for LAM asset and weight download
 - [`tools/run_hybrid_provider_comparison.py`](../tools/run_hybrid_provider_comparison.py) for same-audio provider A/B runs
+- [`tools/run_a2f_quality_study.py`](../tools/run_a2f_quality_study.py) for raw-vs-tuned-vs-LAM quality studies
+- [`tools/face_quality_report.py`](../tools/face_quality_report.py) for offline audio/face quality metrics
 
 ## Viser Playback Debug Note
 
@@ -74,8 +76,10 @@ Each successful hybrid run should materialize one result directory with this str
   face/
     arkit_blendshapes.json
     provider_metadata.json
+    profile_config_snapshot.json
   metrics/
     run_metrics.json
+    face_quality_report.json
   logs/
     *.log
 ```
@@ -111,6 +115,13 @@ Each component entry should record at least:
 - `raw_payload_path`
 - `normalization_policy`
 - `quality_notes`
+
+For profile-driven A2F runs, `face/provider_metadata.json` should additionally expose:
+
+- `profile_name`
+- `mode`
+- `tuning_summary`
+- `quality_study_group`
 
 Recommended `status` values:
 
@@ -192,15 +203,16 @@ Machine-verified conclusion on this workstation:
 
 - headless Firefox alone was not sufficient for the official WebGL avatar renderer
 - the official WebGL avatar did render successfully when launched under `Xvfb` with a non-headless Firefox session
-- the branch helper [`tools/render_hybrid_showcase_video.py`](../tools/render_hybrid_showcase_video.py) now uses that route to capture browser frames and encode a deliverable `mp4`
+- the branch helper [`tools/render_hybrid_showcase_video.py`](../tools/render_hybrid_showcase_video.py) now uses that route to capture browser frames and encode a deliverable `mp4` for both `lam` and `a2f-3d-sdk`
 
 Current verified example artifact:
 
-- `demo_artifacts/hybrid/hybrid_showcase_female_webgl.mp4`
+- `output/hybrid_face_compare/a2f-3d-sdk/showcase.mp4`
 
 Practical debugging rule:
 
 - if the browser preview looks unavailable on a remote server, do not assume the official avatar is unsupported there; first verify whether the session is running under a real X display such as `Xvfb`
+- if you need a minimal fallback for CI or degraded servers, pass `--render-mode coeff2d` explicitly instead of relying on the browser default
 
 ## Legacy / Debug Path
 

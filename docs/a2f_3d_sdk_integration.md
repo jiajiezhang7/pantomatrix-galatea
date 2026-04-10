@@ -47,6 +47,10 @@ bash tools/bootstrap_a2f3d_sdk_env.sh
 Checked-in example config:
 
 - `configs/a2f3d_sdk.example.json`
+- `configs/a2f_profiles/raw-regression.json`
+- `configs/a2f_profiles/tuned-regression-v1.json`
+- `configs/a2f_profiles/tuned-regression-v2.json`
+- `configs/a2f_profiles/diffusion-candidate.json`
 
 The wrapper script:
 
@@ -57,15 +61,21 @@ accepts either:
 - a machine-local `command` template for live SDK inference
 - or `raw_output_json` for replaying a previously generated A2F payload
 
+For profile-driven local tuning, the wrapper now also supports:
+
+- `base_profile_dir` plus `profile_overrides` to stage a modified SDK sample profile at run time
+- `profile_name`, `model_identity`, `tuning_summary`, and `quality_study_group` metadata
+- diffusion-specific knobs such as `identity_index` and `constant_noise`
+
 ## Hybrid Usage
 
 Single-provider run:
 
 ```bash
 python tools/hybrid_pipeline.py \
-  --audio data/audio/audio-demo-female.wav \
-  --body-npz data/emage_outputs/audio-demo-female_output.npz \
-  --output-dir /tmp/hybrid_a2f_demo \
+  --audio output/migrated_workspace_artifacts/data/audio/audio-demo-female.wav \
+  --body-npz output/migrated_workspace_artifacts/data/emage_outputs/audio-demo-female_output.npz \
+  --output-dir output/hybrid_a2f_demo \
   --face-provider a2f-3d-sdk \
   --face-python /home/vanto/anaconda3/envs/a2f3d-sdk310/bin/python \
   --face-repo /home/vanto/pantomatrix_ws/third_party/Audio2Face-3D-SDK \
@@ -76,10 +86,19 @@ Comparison run:
 
 ```bash
 python tools/run_hybrid_provider_comparison.py \
-  --audio data/audio/audio-demo-female.wav \
-  --body-npz data/emage_outputs/audio-demo-female_output.npz \
-  --output-root /tmp/hybrid_face_compare \
+  --audio output/migrated_workspace_artifacts/data/audio/audio-demo-female.wav \
+  --body-npz output/migrated_workspace_artifacts/data/emage_outputs/audio-demo-female_output.npz \
+  --output-root output/hybrid_face_compare \
   --a2f-config-file /home/vanto/pantomatrix_ws/configs/a2f3d_sdk.example.json
+```
+
+Quality-study run:
+
+```bash
+python tools/run_a2f_quality_study.py \
+  --audio output/migrated_workspace_artifacts/data/audio/audio-demo-female.wav \
+  --body-npz output/migrated_workspace_artifacts/data/emage_outputs/audio-demo-female_output.npz \
+  --output-root output/a2f_quality_study
 ```
 
 ## Output Notes
@@ -88,16 +107,24 @@ Each hybrid run now writes:
 
 - `face/arkit_blendshapes.json`
 - `face/provider_metadata.json`
+- `face/profile_config_snapshot.json` for profile-driven A2F runs
+- `metrics/face_quality_report.json`
 
 For `a2f-3d-sdk`, `provider_metadata.json` records:
 
 - `provider = "a2f-3d-sdk"`
 - `normalization_policy = "raw-a2f"`
+- `profile_name`
+- `mode`
+- `tuning_summary`
+- `quality_study_group`
 - provider caveats about eye behavior and `MouthClose`
 
 ## Render Path
 
 The showcase renderer is now provider-aware:
 
-- `lam` defaults to browser/WebGL rendering when available
-- `a2f-3d-sdk` defaults to coefficient-to-2D rendering for stable `mp4` output
+- `lam` defaults to browser/WebGL rendering
+- `a2f-3d-sdk` now also defaults to browser/WebGL rendering through the same 3D avatar lane
+- `coeff2d` remains available as a manual fallback via `--render-mode coeff2d`
+- the verified headless-server path uses the `lam-a2e310` env plus `Xvfb` from that env

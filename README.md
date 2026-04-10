@@ -40,8 +40,9 @@ The branch-level execution contract, result folder layout, and environment matri
 
 Server-side showcase note:
 
-- when operating this branch over SSH, the official LAM WebGL avatar is now exported as an `mp4` through [`tools/render_hybrid_showcase_video.py`](tools/render_hybrid_showcase_video.py) using `Xvfb + Firefox`, instead of requiring an interactive browser tab
-- current example deliverable: `demo_artifacts/hybrid/hybrid_showcase_female_webgl.mp4`
+- when operating this branch over SSH, both `lam` and `a2f-3d-sdk` now default to the WebGL/browser avatar render path in [`tools/render_hybrid_showcase_video.py`](tools/render_hybrid_showcase_video.py)
+- the verified server-side render path uses Firefox plus `Xvfb`; `coeff2d` remains available as a manual fallback via `--render-mode coeff2d`
+- current example deliverables live under `output/`, for example `output/hybrid_face_compare/a2f-3d-sdk/showcase.mp4`
 
 Important note:
 
@@ -79,6 +80,8 @@ Helper scripts:
 - [`tools/download_lam_a2e_assets.py`](tools/download_lam_a2e_assets.py)
 - [`tools/run_a2f3d_sdk_inference.py`](tools/run_a2f3d_sdk_inference.py)
 - [`tools/run_hybrid_provider_comparison.py`](tools/run_hybrid_provider_comparison.py)
+- [`tools/run_a2f_quality_study.py`](tools/run_a2f_quality_study.py)
+- [`tools/face_quality_report.py`](tools/face_quality_report.py)
 - asset redownload reference: [`docs/external-assets-redownload.md`](docs/external-assets-redownload.md)
 
 ## Upstream Source Snapshots
