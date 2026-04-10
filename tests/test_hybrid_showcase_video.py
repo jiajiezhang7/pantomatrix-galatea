@@ -34,6 +34,49 @@ def test_build_face_render_package_writes_expected_zip_layout(tmp_path: Path):
     assert "status/arkitWithBSData/bsData.json" in names
 
 
+def test_convert_face_payload_to_render_bsdata_rewrites_hybrid_contract(tmp_path: Path):
+    showcase = load_tool_module("hybrid_showcase_video_test", "render_hybrid_showcase_video.py")
+    face_json = tmp_path / "face.json"
+    face_json.write_text(
+        json.dumps(
+            {
+                "fps": 30.0,
+                "frame_count": 2,
+                "names": ["jawOpen", "mouthSmileLeft"],
+                "frames": [
+                    {"frame": 0, "time_sec": 0.0, "blendshapes": {"jawOpen": 0.5, "mouthSmileLeft": 0.25}},
+                    {"frame": 1, "time_sec": 1 / 30, "blendshapes": {"jawOpen": 0.75}},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    converted = showcase.convert_face_payload_to_render_bsdata(face_json)
+
+    assert converted["metadata"]["fps"] == 30.0
+    assert converted["metadata"]["frame_count"] == 2
+    assert converted["frames"][0]["weights"] == [0.5, 0.25]
+    assert converted["frames"][0]["time"] == 0.0
+    assert converted["frames"][0]["rotation"] == []
+    assert converted["frames"][1]["weights"] == [0.75, 0.0]
+
+
+def test_convert_face_payload_to_render_bsdata_preserves_official_format(tmp_path: Path):
+    showcase = load_tool_module("hybrid_showcase_video_test", "render_hybrid_showcase_video.py")
+    face_json = tmp_path / "bsData.json"
+    payload = {
+        "names": ["jawOpen"],
+        "metadata": {"fps": 30.0, "frame_count": 1, "blendshape_names": ["jawOpen"]},
+        "frames": [{"weights": [0.5], "time": 0.0, "rotation": []}],
+    }
+    face_json.write_text(json.dumps(payload), encoding="utf-8")
+
+    converted = showcase.convert_face_payload_to_render_bsdata(face_json)
+
+    assert converted == payload
+
+
 def test_build_ffmpeg_stack_command_uses_hstack_and_audio_map():
     showcase = load_tool_module("hybrid_showcase_video_test", "render_hybrid_showcase_video.py")
 
@@ -42,11 +85,13 @@ def test_build_ffmpeg_stack_command_uses_hstack_and_audio_map():
         face_video=Path("/tmp/face.mp4"),
         audio_file=Path("/tmp/audio.wav"),
         output_video=Path("/tmp/out.mp4"),
+        fps=30,
     )
 
     joined = " ".join(str(part) for part in command)
     assert command[0] == "ffmpeg"
     assert "hstack=inputs=2" in joined
+    assert "fps=30" in joined
     assert "-map 2:a:0" in joined
     assert str(Path("/tmp/out.mp4")) in joined
 
@@ -64,7 +109,7 @@ def test_build_face_video_command_normalizes_to_even_dimensions():
     assert "scale=trunc(iw/2)*2:trunc(ih/2)*2" in joined
 
 
-def test_default_render_mode_prefers_coeff2d_for_a2f_provider():
+def test_default_render_mode_prefers_browser_for_a2f_provider():
     showcase = load_tool_module("hybrid_showcase_video_test", "render_hybrid_showcase_video.py")
 
     args = showcase.parse_args(
@@ -80,7 +125,8 @@ def test_default_render_mode_prefers_coeff2d_for_a2f_provider():
         ]
     )
 
-    assert showcase.resolve_render_mode(args.face_provider, args.render_mode) == "coeff2d"
+    assert showcase.resolve_render_mode(args.face_provider, args.render_mode) == "browser"
+    assert args.fps == 30
 
 
 def test_default_render_mode_keeps_browser_for_lam_provider():
@@ -100,6 +146,27 @@ def test_default_render_mode_keeps_browser_for_lam_provider():
     )
 
     assert showcase.resolve_render_mode(args.face_provider, args.render_mode) == "browser"
+
+
+def test_detect_browser_render_issues_reports_missing_binaries(monkeypatch):
+    showcase = load_tool_module("hybrid_showcase_video_test", "render_hybrid_showcase_video.py")
+
+    def fake_which(name: str):
+        if name == "Xvfb":
+            return None
+        return f"/usr/bin/{name}"
+
+    monkeypatch.setattr(showcase.shutil, "which", fake_which)
+    monkeypatch.setattr(showcase, "_python_has_module", lambda python_bin, module_name: module_name != "selenium")
+
+    issues = showcase.detect_browser_render_issues(
+        lam_python="/tmp/lam/bin/python",
+        geckodriver_path="/usr/bin/geckodriver",
+        firefox_binary="/usr/bin/firefox",
+    )
+
+    assert "missing system binary: Xvfb" in issues
+    assert "python runtime missing module: selenium (/tmp/lam/bin/python)" in issues
 
 
 def test_capture_schedule_matches_duration_and_fps():
@@ -135,3 +202,22 @@ def test_find_available_x_display_skips_taken_slots(tmp_path, monkeypatch):
     monkeypatch.setattr(showcase, "X11_SOCKET_DIR", x11_dir)
 
     assert showcase.find_available_x_display(start=99, end=103) == ":101"
+
+
+def test_find_body_video_supports_output_migrated_workspace_artifacts(tmp_path: Path):
+    showcase = load_tool_module("hybrid_showcase_video_test", "render_hybrid_showcase_video.py")
+    migrated_video = (
+        tmp_path
+        / "output"
+        / "migrated_workspace_artifacts"
+        / "data"
+        / "rendered_videos"
+        / "female"
+        / "audio-demo-female_output.mp4"
+    )
+    migrated_video.parent.mkdir(parents=True)
+    migrated_video.write_text("video", encoding="utf-8")
+
+    found = showcase._find_body_video(tmp_path / "audio-demo-female.wav", tmp_path)
+
+    assert found == migrated_video

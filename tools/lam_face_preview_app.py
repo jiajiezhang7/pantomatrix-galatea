@@ -4,9 +4,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import gradio as gr
-from gradio_gaussian_render import gaussian_render
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Minimal LAM face preview app for packaged arkitWithBSData zips.")
@@ -19,12 +16,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def build_app_css() -> str:
+    return "#fps { display: none !important; }"
+
+
 def main() -> int:
+    import gradio as gr
+    from gradio_gaussian_render import gaussian_render
+
     args = parse_args()
     zip_url = f"gradio_api/file={args.assets_dir / args.zip_name}"
 
     gr.set_static_paths(args.assets_dir)
-    with gr.Blocks(analytics_enabled=False) as demo:
+    with gr.Blocks(analytics_enabled=False, css=build_app_css()) as demo:
         gaussian_render(width=args.width, height=args.height)
         demo.load(
             fn=None,

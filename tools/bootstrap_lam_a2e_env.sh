@@ -15,6 +15,7 @@ fi
 
 conda activate "${ENV_NAME}"
 cd "${REPO_ROOT}"
+conda install -y xorg-xserver-xvfb
 
 python --version
 sh ./scripts/install/install_cu121.sh
@@ -52,7 +53,13 @@ if [[ "${probe_exit}" == "42" ]]; then
 fi
 
 python - <<'PY'
+from importlib.util import find_spec
 import torch
+
+required_modules = ["selenium", "gradio", "gradio_gaussian_render"]
+missing = [name for name in required_modules if find_spec(name) is None]
+if missing:
+    raise SystemExit(f"missing_python_modules={missing}")
 
 print("torch", torch.__version__)
 print("cuda_available", torch.cuda.is_available())
@@ -62,6 +69,11 @@ if torch.cuda.is_available():
     print("cuda_op_ok", y.cpu().tolist())
     print("device_name", torch.cuda.get_device_name(0))
 PY
+
+if [[ ! -x "${CONDA_PREFIX}/bin/Xvfb" ]]; then
+  echo "expected ${CONDA_PREFIX}/bin/Xvfb after bootstrap" >&2
+  exit 1
+fi
 
 python inference.py --help >/dev/null
 echo "LAM environment ready: ${ENV_NAME}"

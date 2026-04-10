@@ -24,7 +24,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--avatar-dir", type=Path, default=workspace_root / "third_party" / "LAM_Audio2Expression" / "assets" / "sample_lam" / "status" / "arkitWithBSData")
     parser.add_argument("--lam-python", type=str, default="/home/vanto/anaconda3/envs/lam-a2e310/bin/python")
     parser.add_argument("--preview-port", type=int, default=7861)
-    parser.add_argument("--fps", type=int, default=15)
+    parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--face-provider", choices=("lam", "a2f-3d-sdk"), default="lam")
     parser.add_argument("--geckodriver", type=str, default="/snap/bin/geckodriver")
@@ -38,9 +38,100 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def resolve_render_mode(face_provider: str, render_mode: str) -> str:
     if render_mode != "auto":
         return render_mode
-    if face_provider == "a2f-3d-sdk":
-        return "coeff2d"
     return "browser"
+
+
+def _python_has_module(python_bin: str, module_name: str) -> bool:
+    result = subprocess.run(
+        [
+            python_bin,
+            "-c",
+            (
+                "from importlib.util import find_spec; "
+                f"raise SystemExit(0 if find_spec({module_name!r}) else 1)"
+            ),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _lam_bin_dir(lam_python: str) -> Path:
+    return Path(lam_python).resolve().parent
+
+
+def _known_binary_candidates(binary_name: str) -> tuple[Path, ...]:
+    if binary_name == "firefox":
+        return (Path("/snap/firefox/current/usr/lib/firefox/firefox"),)
+    if binary_name == "geckodriver":
+        return (Path("/snap/firefox/current/usr/lib/firefox/geckodriver"),)
+    return ()
+
+
+def _resolve_binary_path(configured_path: str, binary_name: str, *, search_dirs: tuple[Path, ...] = ()) -> str | None:
+    candidate = Path(configured_path)
+    for search_dir in search_dirs:
+        scoped_candidate = search_dir / binary_name
+        if scoped_candidate.exists():
+            return str(scoped_candidate)
+    for known_candidate in _known_binary_candidates(binary_name):
+        if known_candidate.exists():
+            return str(known_candidate)
+    if configured_path and candidate.exists():
+        return str(candidate)
+    discovered = shutil.which(binary_name)
+    if discovered:
+        return discovered
+    if configured_path and shutil.which(configured_path):
+        return shutil.which(configured_path)
+    return None
+
+
+def detect_browser_render_issues(*, lam_python: str, geckodriver_path: str, firefox_binary: str) -> list[str]:
+    issues: list[str] = []
+    lam_bin_dir = _lam_bin_dir(lam_python)
+    resolved_xvfb = _resolve_binary_path("Xvfb", "Xvfb", search_dirs=(lam_bin_dir,))
+    if resolved_xvfb is None:
+        issues.append("missing system binary: Xvfb")
+
+    resolved_firefox = _resolve_binary_path(firefox_binary, "firefox", search_dirs=(lam_bin_dir,))
+    if resolved_firefox is None:
+        issues.append(f"missing browser binary: firefox ({firefox_binary})")
+
+    resolved_geckodriver = _resolve_binary_path(geckodriver_path, "geckodriver", search_dirs=(lam_bin_dir,))
+    if resolved_geckodriver is None:
+        issues.append(f"missing browser driver: geckodriver ({geckodriver_path})")
+
+    for module_name in ("selenium", "gradio", "gradio_gaussian_render"):
+        if not _python_has_module(lam_python, module_name):
+            issues.append(f"python runtime missing module: {module_name} ({lam_python})")
+
+    return issues
+
+
+def ensure_browser_render_ready(*, lam_python: str, geckodriver_path: str, firefox_binary: str) -> tuple[str, str, str]:
+    issues = detect_browser_render_issues(
+        lam_python=lam_python,
+        geckodriver_path=geckodriver_path,
+        firefox_binary=firefox_binary,
+    )
+    if issues:
+        joined = "; ".join(issues)
+        raise RuntimeError(
+            "Browser/WebGL face rendering is unavailable: "
+            f"{joined}. "
+            "Install the missing browser runtime pieces or rerun with --render-mode coeff2d."
+        )
+    lam_bin_dir = _lam_bin_dir(lam_python)
+    resolved_xvfb = _resolve_binary_path("Xvfb", "Xvfb", search_dirs=(lam_bin_dir,))
+    resolved_firefox = _resolve_binary_path(firefox_binary, "firefox", search_dirs=(lam_bin_dir,))
+    resolved_geckodriver = _resolve_binary_path(geckodriver_path, "geckodriver", search_dirs=(lam_bin_dir,))
+    assert resolved_xvfb is not None
+    assert resolved_firefox is not None
+    assert resolved_geckodriver is not None
+    return resolved_xvfb, resolved_geckodriver, resolved_firefox
 
 
 def build_face_render_package(
@@ -52,6 +143,8 @@ def build_face_render_package(
 ) -> None:
     required_assets = ["animation.glb", "skin.glb", "offset.ply", "vertex_order.json"]
     package_root = base_asset_dir.parent.name
+    normalized_bsdata = json.dumps(convert_face_payload_to_render_bsdata(bsdata_json), ensure_ascii=True).encode("utf-8")
+    zip_path = zip_path.resolve()
     zip_exe = shutil.which("zip")
     if zip_exe:
         with tempfile.TemporaryDirectory(prefix="face_render_pkg_") as temp_dir_str:
@@ -60,7 +153,7 @@ def build_face_render_package(
             package_dir.mkdir(parents=True, exist_ok=True)
             for asset_name in required_assets:
                 shutil.copy2(base_asset_dir / asset_name, package_dir / asset_name)
-            shutil.copy2(bsdata_json, package_dir / "bsData.json")
+            (package_dir / "bsData.json").write_bytes(normalized_bsdata)
             if zip_path.exists():
                 zip_path.unlink()
             subprocess.run(
@@ -87,7 +180,41 @@ def build_face_render_package(
         )
         info.compress_type = zipfile.ZIP_DEFLATED
         info.external_attr = 0o644 << 16
-        zf.writestr(info, bsdata_json.read_bytes())
+        zf.writestr(info, normalized_bsdata)
+
+
+def convert_face_payload_to_render_bsdata(face_json: Path) -> dict[str, object]:
+    payload = json.loads(face_json.read_text(encoding="utf-8"))
+    if "names" not in payload:
+        return payload
+    frames = payload.get("frames") or []
+    if "names" in payload and "metadata" in payload and (not frames or ("weights" in frames[0] and "time" in frames[0])):
+        return payload
+    if frames and "weights" in frames[0] and "time" in frames[0]:
+        return payload
+
+    names = list(payload["names"])
+    fps = float(payload.get("fps") or payload.get("metadata", {}).get("fps") or 30.0)
+    converted_frames: list[dict[str, object]] = []
+    for idx, frame in enumerate(frames):
+        blendshapes = frame.get("blendshapes") or {}
+        converted_frames.append(
+            {
+                "weights": [float(blendshapes.get(name, 0.0)) for name in names],
+                "time": float(frame.get("time_sec", idx / fps)),
+                "rotation": frame.get("rotation") or [],
+            }
+        )
+
+    return {
+        "names": names,
+        "metadata": {
+            "fps": fps,
+            "frame_count": int(payload.get("frame_count", len(converted_frames))),
+            "blendshape_names": names,
+        },
+        "frames": converted_frames,
+    }
 
 
 def build_capture_schedule(duration_sec: float, fps: int) -> list[float]:
@@ -101,6 +228,7 @@ def build_ffmpeg_stack_command(
     face_video: Path,
     audio_file: Path,
     output_video: Path,
+    fps: int,
 ) -> list[str]:
     return [
         "ffmpeg",
@@ -112,7 +240,7 @@ def build_ffmpeg_stack_command(
         "-i",
         str(audio_file),
         "-filter_complex",
-        "[0:v]scale=-2:720[body];[1:v]scale=-2:720[face];[body][face]hstack=inputs=2[v]",
+        f"[0:v]fps={fps},scale=-2:720[body];[1:v]fps={fps},scale=-2:720[face];[body][face]hstack=inputs=2,fps={fps}[v]",
         "-map",
         "[v]",
         "-map",
@@ -163,7 +291,14 @@ def find_available_x_display(*, start: int = 99, end: int = 199) -> str:
 
 def _find_body_video(audio_path: Path, workspace_root: Path) -> Path:
     stem = audio_path.stem
-    matches = sorted((workspace_root / "data" / "rendered_videos").rglob(f"{stem}_output.mp4"))
+    search_roots = (
+        workspace_root / "data" / "rendered_videos",
+        workspace_root / "output" / "migrated_workspace_artifacts" / "data" / "rendered_videos",
+    )
+    matches: list[Path] = []
+    for search_root in search_roots:
+        if search_root.exists():
+            matches.extend(sorted(search_root.rglob(f"{stem}_output.mp4")))
     if not matches:
         raise FileNotFoundError(f"No rendered body video found for {stem}")
     return matches[0]
@@ -196,6 +331,7 @@ def _capture_face_frames(
     zip_url: str,
     schedule: list[float],
     screenshot_dir: Path,
+    xvfb_binary: str,
     geckodriver_path: str,
     firefox_binary: str,
     width: int,
@@ -209,13 +345,11 @@ def _capture_face_frames(
     screenshot_dir.mkdir(parents=True, exist_ok=True)
     options = Options()
     options.add_argument("--new-instance")
+    options.binary_location = firefox_binary
     browser_env = os.environ.copy()
     display = find_available_x_display()
     xvfb_cmd = build_xvfb_command(display=display, width=1920, height=1080, depth=24)
-    xvfb_exe = shutil.which(xvfb_cmd[0])
-    if xvfb_exe is None:
-        raise RuntimeError("Xvfb is required for browser face rendering on this server")
-    xvfb_cmd[0] = xvfb_exe
+    xvfb_cmd[0] = xvfb_binary
     xvfb_proc = subprocess.Popen(xvfb_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     browser_env["DISPLAY"] = display
     browser_env["GDK_BACKEND"] = "x11"
@@ -452,6 +586,11 @@ def main(argv: list[str] | None = None) -> int:
         ]
         face_video = temp_dir / "face.mp4"
         if chosen_render_mode == "browser":
+            resolved_xvfb, resolved_geckodriver, resolved_firefox = ensure_browser_render_ready(
+                lam_python=args.lam_python,
+                geckodriver_path=args.geckodriver,
+                firefox_binary=args.firefox_binary,
+            )
             app_proc = subprocess.Popen(app_command, stdout=app_log.open("w"), stderr=subprocess.STDOUT)
             screenshot_dir = temp_dir / "face_frames"
             try:
@@ -463,8 +602,9 @@ def main(argv: list[str] | None = None) -> int:
                     zip_url=zip_url,
                     schedule=capture_schedule,
                     screenshot_dir=screenshot_dir,
-                    geckodriver_path=args.geckodriver,
-                    firefox_binary=args.firefox_binary,
+                    xvfb_binary=resolved_xvfb,
+                    geckodriver_path=resolved_geckodriver,
+                    firefox_binary=resolved_firefox,
                     width=args.face_width,
                     height=args.face_height,
                 )
@@ -502,6 +642,7 @@ def main(argv: list[str] | None = None) -> int:
             face_video=face_video,
             audio_file=args.audio,
             output_video=args.output,
+            fps=args.fps,
         )
         _run_ffmpeg(command)
 

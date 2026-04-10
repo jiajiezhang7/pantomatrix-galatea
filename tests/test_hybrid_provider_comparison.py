@@ -31,3 +31,30 @@ def test_write_comparison_manifest_records_both_providers(tmp_path: Path):
     assert manifest["audio_path"] == "data/audio/audio-demo-female.wav"
     assert set(manifest["providers"]) == {"a2f-3d-sdk", "lam"}
     assert manifest["providers"]["a2f-3d-sdk"]["video"] == "runs/a2f-3d-sdk/showcase.mp4"
+
+
+def test_build_render_command_uses_lam_python_runtime(tmp_path: Path):
+    compare = load_tool_module("hybrid_provider_compare_test", "run_hybrid_provider_comparison.py")
+    args = compare.parse_args(
+        [
+            "--audio",
+            "/tmp/audio.wav",
+            "--body-npz",
+            "/tmp/body.npz",
+            "--output-root",
+            "/tmp/runs",
+            "--lam-python",
+            "/opt/conda/envs/lam/bin/python",
+        ]
+    )
+
+    command = compare.build_render_command(
+        args=args,
+        provider="a2f-3d-sdk",
+        run_dir=tmp_path / "a2f-3d-sdk",
+        showcase_video=tmp_path / "a2f-3d-sdk" / "showcase.mp4",
+    )
+
+    assert command[0] == "/opt/conda/envs/lam/bin/python"
+    assert command[1].endswith("render_hybrid_showcase_video.py")
+    assert "--face-provider" in command

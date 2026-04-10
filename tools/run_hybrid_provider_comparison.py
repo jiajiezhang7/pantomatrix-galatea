@@ -67,6 +67,29 @@ def _provider_command(args: argparse.Namespace, provider: str, output_dir: Path)
     return command
 
 
+def build_render_command(
+    *,
+    args: argparse.Namespace,
+    provider: str,
+    run_dir: Path,
+    showcase_video: Path,
+) -> list[str]:
+    return [
+        args.lam_python,
+        str(args.render_script),
+        "--audio",
+        str(args.audio),
+        "--face-json",
+        str(run_dir / "face" / "arkit_blendshapes.json"),
+        "--face-provider",
+        provider,
+        "--output",
+        str(showcase_video),
+        "--lam-python",
+        args.lam_python,
+    ]
+
+
 def write_comparison_manifest(
     *,
     manifest_path: Path,
@@ -96,21 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         subprocess.run(_provider_command(args, provider, run_dir), check=True)
 
         showcase_video = run_dir / "showcase.mp4"
-        subprocess.run(
-            [
-                sys.executable,
-                str(args.render_script),
-                "--audio",
-                str(args.audio),
-                "--face-json",
-                str(run_dir / "face" / "arkit_blendshapes.json"),
-                "--face-provider",
-                provider,
-                "--output",
-                str(showcase_video),
-            ],
-            check=True,
-        )
+        subprocess.run(build_render_command(args=args, provider=provider, run_dir=run_dir, showcase_video=showcase_video), check=True)
         provider_outputs[provider] = {
             "run_dir": str(run_dir),
             "video": str(showcase_video),
