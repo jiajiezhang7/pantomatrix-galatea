@@ -37,6 +37,8 @@ struct Args {
   int frame_rate = 30;
   int device_id = 0;
   bool use_gpu_solver = false;
+  bool constant_noise = false;
+  int identity_index = 0;
   std::string mode = "regression";
 };
 
@@ -83,6 +85,10 @@ Args ParseArgs(int argc, char** argv) {
       args.device_id = std::stoi(require_value(flag));
     } else if (flag == "--mode") {
       args.mode = require_value(flag);
+    } else if (flag == "--identity-index") {
+      args.identity_index = std::stoi(require_value(flag));
+    } else if (flag == "--constant-noise") {
+      args.constant_noise = true;
     } else if (flag == "--gpu-solver") {
       args.use_gpu_solver = true;
     } else {
@@ -156,8 +162,8 @@ UniquePtr<nva2f::IBlendshapeExecutorBundle> CreateBundle(const Args& args) {
       args.model_json.c_str(),
       nva2f::IGeometryExecutor::ExecutionOption::SkinTongue,
       args.use_gpu_solver,
-      2,
-      false,
+      static_cast<std::size_t>(args.identity_index),
+      args.constant_noise,
       nullptr,
       nullptr));
 }
@@ -222,7 +228,7 @@ std::string EscapeJson(const std::string& value) {
   return escaped;
 }
 
-void WriteJson(const Args& args, const std::vector<std::string>& names, const CallbackData& callback_data) {
+void WriteJson(const Args& args, double actual_fps, const std::vector<std::string>& names, const CallbackData& callback_data) {
   std::ofstream output(args.output_json);
   if (!output) {
     Die("Unable to open output json: " + args.output_json);
@@ -231,7 +237,7 @@ void WriteJson(const Args& args, const std::vector<std::string>& names, const Ca
   output << "{\n";
   output << "  \"provider\": \"a2f-3d-sdk\",\n";
   output << "  \"metadata\": {\n";
-  output << "    \"fps\": " << args.frame_rate << ",\n";
+  output << "    \"fps\": " << actual_fps << ",\n";
   output << "    \"frame_count\": " << callback_data.frames.size() << ",\n";
   output << "    \"blendshape_names\": [";
   for (std::size_t index = 0; index < names.size(); ++index) {
@@ -282,6 +288,13 @@ int main(int argc, char** argv) {
     Die("Blendshape executor bundle is null");
   }
 
+  std::size_t frame_rate_numerator = 0;
+  std::size_t frame_rate_denominator = 1;
+  bundle->GetExecutor().GetFrameRate(frame_rate_numerator, frame_rate_denominator);
+  const double actual_fps = frame_rate_denominator == 0
+      ? static_cast<double>(args.frame_rate)
+      : static_cast<double>(frame_rate_numerator) / static_cast<double>(frame_rate_denominator);
+
   const auto pose_names = CollectPoseNames(bundle->GetExecutor());
   const auto audio_samples = ReadAudio(args.audio_wav);
   AccumulateNeutralEmotion(*bundle);
@@ -289,6 +302,6 @@ int main(int argc, char** argv) {
 
   CallbackData callback_data;
   RunExecutor(*bundle, callback_data);
-  WriteJson(args, pose_names, callback_data);
+  WriteJson(args, actual_fps, pose_names, callback_data);
   return 0;
 }

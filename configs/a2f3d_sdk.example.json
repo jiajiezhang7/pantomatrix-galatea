@@ -2,19 +2,27 @@
   "sdk_root": "/home/vanto/pantomatrix_ws/third_party/Audio2Face-3D-SDK",
   "build_dir": "/home/vanto/pantomatrix_ws/third_party/Audio2Face-3D-SDK/_build/release",
   "toolchain_root": "/home/vanto/.local/nvidia/a2f3d-sdk",
-  "model_json": "/home/vanto/pantomatrix_ws/third_party/Audio2Face-3D-SDK/_data/generated/audio2face-sdk/samples/data/mark/model.json",
+  "profile_name": "raw-regression",
+  "base_profile_dir": "/home/vanto/pantomatrix_ws/third_party/Audio2Face-3D-SDK/_data/generated/audio2face-sdk/samples/data/mark",
+  "model_json_relpath": "model.json",
+  "model_identity": "Mark",
   "mode": "regression",
   "frame_rate": 30,
   "device_id": 0,
   "use_gpu_solver": false,
+  "quality_study_group": "manual-run",
+  "tuning_summary": {
+    "intent": "Raw sample regression baseline."
+  },
+  "profile_overrides": {},
   "env": {
     "A2F3D_TOOLCHAIN_ROOT": "/home/vanto/.local/nvidia/a2f3d-sdk",
     "CUDA_HOME": "/home/vanto/.local/nvidia/a2f3d-sdk/cuda-12.9",
     "TENSORRT_ROOT_DIR": "/home/vanto/.local/nvidia/a2f3d-sdk/tensorrt-10.13"
   },
   "notes": [
-    "This example uses the generated regression sample data for the Mark identity because it is the smallest verified local path in this workspace.",
-    "run_a2f3d_sdk_inference.py will compile tools/a2f3d_sdk_export.cpp on demand and will resample input audio to 16kHz mono before running the SDK bridge.",
-    "Use raw A2F output semantics; the hybrid pipeline will not renormalize MouthClose or synthesize eye motion."
+    "This example uses the raw-regression profile and stages a temporary sample profile directory before invoking the SDK bundle.",
+    "run_a2f3d_sdk_inference.py compiles tools/a2f3d_sdk_export.cpp on demand and resamples input audio to 16kHz mono before running the SDK bridge.",
+    "Use configs/a2f_profiles/tuned-regression-v1.json or tuned-regression-v2.json to run quality-study variants."
   ]
 }

@@ -14,6 +14,12 @@ from typing import Any
 
 import numpy as np
 
+WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+if str(WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORKSPACE_ROOT))
+
+from tools import face_quality_report
+
 
 class ComponentRunResult:
     def __init__(
@@ -236,11 +242,15 @@ class A2F3DSdkFaceAdapter(FaceAdapter):
         return self._build_sdk_result(raw_json=raw_json, command=command)
 
     def _build_sdk_result(self, *, raw_json: Path, command: list[str] | None = None) -> ComponentRunResult:
+        raw_payload = json.loads(raw_json.read_text(encoding="utf-8"))
+        raw_metadata = dict(raw_payload.get("metadata") or {})
         converted_payload = convert_a2f3d_sdk_json_to_face_payload(raw_json)
         hybrid_json = raw_json.parent / "arkit_blendshapes.json"
         hybrid_json.write_text(json.dumps(converted_payload, ensure_ascii=True), encoding="utf-8")
         frames = converted_payload["frames"]
         fps = float(converted_payload["fps"])
+        profile_name = raw_metadata.get("profile_name")
+        tuning_summary = raw_metadata.get("tuning_summary") or {}
         return ComponentRunResult(
             status="ready",
             fps=fps,
@@ -250,13 +260,19 @@ class A2F3DSdkFaceAdapter(FaceAdapter):
             provider_name=self.provider_name,
             normalization_policy="raw-a2f",
             provider_notes=_default_a2f_provider_notes(),
-            quality_notes=["generated via A2F-3D SDK wrapper", "provider=a2f-3d-sdk"],
+            quality_notes=["generated via A2F-3D SDK wrapper", "provider=a2f-3d-sdk"]
+            + ([f"profile={profile_name}"] if profile_name else []),
             timestamps=[float(frame["time_sec"]) for frame in frames],
             metadata={
                 "mode": "sdk-run",
                 "provider": self.provider_name,
                 "raw_output_json": str(raw_json),
                 "command": command or [],
+                "profile_name": profile_name,
+                "model_identity": raw_metadata.get("model_identity"),
+                "tuning_summary": tuning_summary,
+                "quality_study_group": raw_metadata.get("quality_study_group"),
+                "profile_snapshot_path": raw_metadata.get("profile_snapshot_path"),
             },
         )
 
@@ -702,10 +718,22 @@ def _write_face_payload(
 
 
 def _write_provider_metadata(output_path: Path, result: ComponentRunResult, output_dir: Path) -> None:
+    profile_snapshot_source = result.metadata.get("profile_snapshot_path")
+    copied_snapshot_path = None
+    if profile_snapshot_source:
+        snapshot_source = Path(profile_snapshot_source)
+        if snapshot_source.exists():
+            copied_snapshot_path = output_path.parent / "profile_config_snapshot.json"
+            shutil.copy2(snapshot_source, copied_snapshot_path)
     payload = {
         "provider": result.provider_name,
+        "profile_name": result.metadata.get("profile_name"),
+        "mode": result.metadata.get("mode"),
+        "tuning_summary": result.metadata.get("tuning_summary") or {},
+        "quality_study_group": result.metadata.get("quality_study_group"),
         "normalization_policy": result.normalization_policy,
         "raw_payload_path": _relative_to_output(output_dir, result.raw_payload_path),
+        "profile_config_snapshot": _relative_to_output(output_dir, copied_snapshot_path),
         "notes": result.provider_notes,
         "metadata": result.metadata,
     }
@@ -823,8 +851,17 @@ def main(argv: list[str] | None = None) -> int:
             "timings_sec": timings,
             "frame_count": len(timeline),
         }
+        face_quality_payload = face_quality_report.analyze_face_quality(
+            audio_path=args.audio,
+            face_json=face_output_path,
+            label=face_result.metadata.get("profile_name") or args.face_provider,
+        )
         (layout["metrics"] / "run_metrics.json").write_text(
             json.dumps(metrics_payload, ensure_ascii=True),
+            encoding="utf-8",
+        )
+        (layout["metrics"] / "face_quality_report.json").write_text(
+            json.dumps(face_quality_payload, ensure_ascii=True, indent=2) + "\n",
             encoding="utf-8",
         )
 

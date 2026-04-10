@@ -1,0 +1,49 @@
+{
+  "profile_name": "tuned-regression-v1",
+  "mode": "regression",
+  "base_profile_dir": "/home/vanto/pantomatrix_ws/third_party/Audio2Face-3D-SDK/_data/generated/audio2face-sdk/samples/data/mark",
+  "model_json_relpath": "model.json",
+  "model_identity": "Mark",
+  "frame_rate": 30,
+  "device_id": 0,
+  "use_gpu_solver": false,
+  "quality_study_group": "a2f-quality-study",
+  "tuning_summary": {
+    "intent": "Reduce mouth over-activity with moderate strength rollback and extra smoothing.",
+    "input_strength": 1.0,
+    "lower_face_strength": 1.0,
+    "skin_strength": 0.95,
+    "tongue_strength": 1.0,
+    "upper_face_smoothing": 0.004,
+    "lower_face_smoothing": 0.01,
+    "lip_open_offset": -0.04,
+    "blendshape_temporal_smoothing": 0.8
+  },
+  "profile_overrides": {
+    "model_config.json": {
+      "config": {
+        "input_strength": 1.0,
+        "upper_face_smoothing": 0.004,
+        "lower_face_smoothing": 0.01,
+        "upper_face_strength": 0.95,
+        "lower_face_strength": 1.0,
+        "skin_strength": 0.95,
+        "blink_strength": 1.0,
+        "lip_open_offset": -0.04,
+        "tongue_strength": 1.0,
+        "tongue_height_offset": 0.15,
+        "tongue_depth_offset": 0.08
+      }
+    },
+    "bs_skin_config.json": {
+      "blendshape_params": {
+        "strengthTemporalSmoothing": 0.8
+      }
+    }
+  },
+  "env": {
+    "A2F3D_TOOLCHAIN_ROOT": "/home/vanto/.local/nvidia/a2f3d-sdk",
+    "CUDA_HOME": "/home/vanto/.local/nvidia/a2f3d-sdk/cuda-12.9",
+    "TENSORRT_ROOT_DIR": "/home/vanto/.local/nvidia/a2f3d-sdk/tensorrt-10.13"
+  }
+}

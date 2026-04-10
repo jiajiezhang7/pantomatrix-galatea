@@ -1,0 +1,22 @@
+{
+  "profile_name": "diffusion-candidate",
+  "mode": "diffusion",
+  "base_profile_dir": "/home/vanto/pantomatrix_ws/third_party/Audio2Face-3D-SDK/_data/generated/audio2face-sdk/samples/data/multi-diffusion",
+  "model_json_relpath": "model.json",
+  "model_identity": "Mark",
+  "identity_index": 2,
+  "constant_noise": false,
+  "frame_rate": 30,
+  "device_id": 0,
+  "use_gpu_solver": false,
+  "quality_study_group": "a2f-quality-study",
+  "tuning_summary": {
+    "intent": "Second-phase candidate for continuity-focused evaluation."
+  },
+  "profile_overrides": {},
+  "env": {
+    "A2F3D_TOOLCHAIN_ROOT": "/home/vanto/.local/nvidia/a2f3d-sdk",
+    "CUDA_HOME": "/home/vanto/.local/nvidia/a2f3d-sdk/cuda-12.9",
+    "TENSORRT_ROOT_DIR": "/home/vanto/.local/nvidia/a2f3d-sdk/tensorrt-10.13"
+  }
+}

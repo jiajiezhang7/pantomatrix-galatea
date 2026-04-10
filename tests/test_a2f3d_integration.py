@@ -170,3 +170,42 @@ def test_a2f3d_adapter_converts_raw_output_and_preserves_metadata(tmp_path: Path
     assert result.metadata["provider"] == "a2f-3d-sdk"
     assert Path(result.metadata["raw_output_json"]).name == "a2f_raw.json"
     assert payload["frames"][0]["blendshapes"]["mouthClose"] == pytest.approx(0.2)
+
+
+def test_stage_profile_config_applies_json_overrides_and_writes_snapshot(tmp_path: Path):
+    a2f = load_tool_module("a2f_sdk_runner_test", "run_a2f3d_sdk_inference.py")
+    base_profile = tmp_path / "mark"
+    base_profile.mkdir()
+    (base_profile / "model.json").write_text(json.dumps({"modelConfigPath": "model_config.json"}), encoding="utf-8")
+    (base_profile / "model_config.json").write_text(
+        json.dumps({"config": {"input_strength": 1.3, "lower_face_smoothing": 0.0023}}),
+        encoding="utf-8",
+    )
+    (base_profile / "bs_skin_config.json").write_text(
+        json.dumps({"blendshape_params": {"strengthTemporalSmoothing": 0.3}}),
+        encoding="utf-8",
+    )
+
+    config = {
+        "profile_name": "tuned-regression-v1",
+        "base_profile_dir": str(base_profile),
+        "model_json_relpath": "model.json",
+        "profile_overrides": {
+            "model_config.json": {"config": {"input_strength": 1.0, "lower_face_smoothing": 0.01}},
+            "bs_skin_config.json": {"blendshape_params": {"strengthTemporalSmoothing": 0.8}},
+        },
+    }
+
+    resolved_config, snapshot_path = a2f.stage_profile_config(config, tmp_path / "run")
+
+    staged_root = Path(resolved_config["staged_profile_dir"])
+    staged_model_config = json.loads((staged_root / "model_config.json").read_text(encoding="utf-8"))
+    staged_bs_skin_config = json.loads((staged_root / "bs_skin_config.json").read_text(encoding="utf-8"))
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+    assert Path(resolved_config["model_json"]) == staged_root / "model.json"
+    assert staged_model_config["config"]["input_strength"] == pytest.approx(1.0)
+    assert staged_model_config["config"]["lower_face_smoothing"] == pytest.approx(0.01)
+    assert staged_bs_skin_config["blendshape_params"]["strengthTemporalSmoothing"] == pytest.approx(0.8)
+    assert snapshot["profile_name"] == "tuned-regression-v1"
+    assert snapshot["base_profile_dir"] == str(base_profile)

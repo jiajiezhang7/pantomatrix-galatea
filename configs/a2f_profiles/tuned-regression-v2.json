@@ -1,0 +1,49 @@
+{
+  "profile_name": "tuned-regression-v2",
+  "mode": "regression",
+  "base_profile_dir": "/home/vanto/pantomatrix_ws/third_party/Audio2Face-3D-SDK/_data/generated/audio2face-sdk/samples/data/mark",
+  "model_json_relpath": "model.json",
+  "model_identity": "Mark",
+  "frame_rate": 30,
+  "device_id": 0,
+  "use_gpu_solver": false,
+  "quality_study_group": "a2f-quality-study",
+  "tuning_summary": {
+    "intent": "More conservative lower-face drive with stronger smoothing for stability-first evaluation.",
+    "input_strength": 0.9,
+    "lower_face_strength": 0.85,
+    "skin_strength": 0.9,
+    "tongue_strength": 0.85,
+    "upper_face_smoothing": 0.006,
+    "lower_face_smoothing": 0.018,
+    "lip_open_offset": -0.05,
+    "blendshape_temporal_smoothing": 1.2
+  },
+  "profile_overrides": {
+    "model_config.json": {
+      "config": {
+        "input_strength": 0.9,
+        "upper_face_smoothing": 0.006,
+        "lower_face_smoothing": 0.018,
+        "upper_face_strength": 0.9,
+        "lower_face_strength": 0.85,
+        "skin_strength": 0.9,
+        "blink_strength": 1.0,
+        "lip_open_offset": -0.05,
+        "tongue_strength": 0.85,
+        "tongue_height_offset": 0.1,
+        "tongue_depth_offset": 0.05
+      }
+    },
+    "bs_skin_config.json": {
+      "blendshape_params": {
+        "strengthTemporalSmoothing": 1.2
+      }
+    }
+  },
+  "env": {
+    "A2F3D_TOOLCHAIN_ROOT": "/home/vanto/.local/nvidia/a2f3d-sdk",
+    "CUDA_HOME": "/home/vanto/.local/nvidia/a2f3d-sdk/cuda-12.9",
+    "TENSORRT_ROOT_DIR": "/home/vanto/.local/nvidia/a2f3d-sdk/tensorrt-10.13"
+  }
+}
