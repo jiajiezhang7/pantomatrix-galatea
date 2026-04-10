@@ -64,6 +64,44 @@ def test_build_face_video_command_normalizes_to_even_dimensions():
     assert "scale=trunc(iw/2)*2:trunc(ih/2)*2" in joined
 
 
+def test_default_render_mode_prefers_coeff2d_for_a2f_provider():
+    showcase = load_tool_module("hybrid_showcase_video_test", "render_hybrid_showcase_video.py")
+
+    args = showcase.parse_args(
+        [
+            "--audio",
+            "/tmp/audio.wav",
+            "--face-json",
+            "/tmp/face.json",
+            "--output",
+            "/tmp/out.mp4",
+            "--face-provider",
+            "a2f-3d-sdk",
+        ]
+    )
+
+    assert showcase.resolve_render_mode(args.face_provider, args.render_mode) == "coeff2d"
+
+
+def test_default_render_mode_keeps_browser_for_lam_provider():
+    showcase = load_tool_module("hybrid_showcase_video_test", "render_hybrid_showcase_video.py")
+
+    args = showcase.parse_args(
+        [
+            "--audio",
+            "/tmp/audio.wav",
+            "--face-json",
+            "/tmp/face.json",
+            "--output",
+            "/tmp/out.mp4",
+            "--face-provider",
+            "lam",
+        ]
+    )
+
+    assert showcase.resolve_render_mode(args.face_provider, args.render_mode) == "browser"
+
+
 def test_capture_schedule_matches_duration_and_fps():
     showcase = load_tool_module("hybrid_showcase_video_test", "render_hybrid_showcase_video.py")
 

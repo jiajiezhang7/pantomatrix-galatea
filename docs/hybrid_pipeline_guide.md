@@ -9,7 +9,12 @@ This document is the concise execution contract for branch `hybrid/lam-emage-pip
 `R1` targets one hybrid output package built from:
 
 - `EMAGE` body motion as the stable baseline
-- `LAM_Audio2Expression` ARKit blendshapes as the current default face provider, including the eye-related coefficients needed for blink and gaze-like expression control
+- a selectable face provider under `--face-provider`
+
+Current provider posture:
+
+- preferred local provider: `a2f-3d-sdk`
+- comparison provider: `lam`
 
 `EMAGE -> BEAT_Avatars` automation stays paused on this branch. The hybrid pipeline is intended to produce Viser-verifiable body motion plus Unreal-ready face data without making Unreal project execution a repository blocker.
 
@@ -20,9 +25,11 @@ The face lane is intentionally isolated behind a provider boundary. Today that b
 The target branch-level workflow is:
 
 1. Run `EMAGE` body inference from the shared input wav.
-2. Run `LAM_Audio2Expression` on the same wav to produce ARKit-compatible face coefficients.
-   The orchestrator exposes this through `--face-provider`, with `lam` as the current implementation.
-   Prefer the neutral `--face-*` options when wiring a provider into the pipeline; `--lam-*` is only a compatibility alias for the current provider.
+2. Run the selected face provider on the same wav to produce face coefficients.
+   Current implementations:
+   - `a2f-3d-sdk`
+   - `lam`
+   Prefer the neutral `--face-*` options when wiring a provider into the pipeline; `--lam-*` is only a compatibility alias for the LAM provider.
 3. Align body and face outputs to one canonical timeline at `30.0` fps.
 4. Verify body playback in Viser and export the face stream in an Unreal-ready JSON shape.
 
@@ -32,7 +39,10 @@ Current local component entry points that remain relevant on this branch:
 - [`tools/hybrid_pipeline.py`](../tools/hybrid_pipeline.py) for orchestration, provider selection, alignment, and manifest writing
 - [`tools/viser_emage_player.py`](../tools/viser_emage_player.py) for body-only playback validation
 - [`tools/bootstrap_lam_a2e_env.sh`](../tools/bootstrap_lam_a2e_env.sh) for the machine-tested LAM environment bootstrap
+- [`tools/bootstrap_a2f3d_sdk_toolchain.sh`](../tools/bootstrap_a2f3d_sdk_toolchain.sh) for side-by-side CUDA/TensorRT provisioning
+- [`tools/bootstrap_a2f3d_sdk_env.sh`](../tools/bootstrap_a2f3d_sdk_env.sh) for the dedicated A2F conda env
 - [`tools/download_lam_a2e_assets.py`](../tools/download_lam_a2e_assets.py) for LAM asset and weight download
+- [`tools/run_hybrid_provider_comparison.py`](../tools/run_hybrid_provider_comparison.py) for same-audio provider A/B runs
 
 ## Viser Playback Debug Note
 
@@ -63,6 +73,7 @@ Each successful hybrid run should materialize one result directory with this str
     body.npz
   face/
     arkit_blendshapes.json
+    provider_metadata.json
   metrics/
     run_metrics.json
   logs/
@@ -96,6 +107,9 @@ Each component entry should record at least:
 - `fps`
 - `frame_count`
 - `payload_path`
+- `provider_name`
+- `raw_payload_path`
+- `normalization_policy`
 - `quality_notes`
 
 Recommended `status` values:
@@ -140,17 +154,24 @@ Machine-verified LAM eye blendshapes currently include:
 - `eyeWideLeft`
 - `eyeWideRight`
 
+Provider-specific caveat:
+
+- `a2f-3d-sdk` runs in raw-fidelity mode and may emit omitted or zeroed eye-look coefficients; the repository does not synthesize them.
+- `face/provider_metadata.json` is the source of truth for provider-specific normalization and caveats.
+
 ## Environment Matrix
 
-This branch deliberately keeps `EMAGE` and `LAM_Audio2Expression` in separate environments.
+This branch deliberately keeps `EMAGE`, `LAM_Audio2Expression`, and `Audio2Face-3D SDK` in separate environments.
 
 | Component | Role in hybrid branch | Current environment expectation | Evidence |
 | --- | --- | --- | --- |
 | `EMAGE` / `PantoMatrix` | Body baseline | Upstream quick start uses `bash setup.sh` and activates `/content/py39/bin/activate`, so this branch treats the local EMAGE lane as a Python 3.9-style environment. | [PantoMatrix README](https://github.com/PantoMatrix/PantoMatrix) |
 | `LAM_Audio2Expression` | Main face path | Official README says the project currently supports Python 3.10 and provides separate CUDA 12.1 / 11.8 install scripts. | [LAM_Audio2Expression README](https://github.com/aigc3d/LAM_Audio2Expression) |
+| `Audio2Face-3D SDK` | Preferred local face path | This branch keeps a dedicated `a2f3d-sdk310` env and a side-by-side `CUDA 12.9 + TensorRT 10.13` prefix under `$HOME/.local/nvidia/a2f3d-sdk` so the workstation can keep its system CUDA 13.2. | [Audio2Face-3D SDK](https://github.com/NVIDIA/Audio2Face-3D-SDK) |
 Practical consequence:
 
 - do not mix the EMAGE and LAM Python dependencies into one environment
+- do not mix the A2F SDK runtime with the system CUDA 13.2 path; use the side-by-side toolchain root instead
 - on this workstation, treat the official `cu121` install as an initial step only; the verified runnable state required a follow-up torch upgrade to `cu128` because the Blackwell GPU could not execute kernels with `torch 2.1.2+cu121`
 
 ## LAM Integration Note
@@ -158,6 +179,10 @@ Practical consequence:
 For the machine-verified LAM setup, real inference commands, and the official-output-to-hybrid-contract mapping, see:
 
 - [`docs/lam_a2e_integration.md`](lam_a2e_integration.md)
+
+For the A2F SDK toolchain strategy, environment bootstrap, and provider config contract, see:
+
+- [`docs/a2f_3d_sdk_integration.md`](a2f_3d_sdk_integration.md)
 
 ## Server-Side WebGL Showcase Export
 

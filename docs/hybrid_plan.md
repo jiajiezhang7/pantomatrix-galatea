@@ -82,3 +82,38 @@
 
 详细交接信息见：
 - `docs/retarget-handoff-2026-04-09.md`
+
+---
+
+## 8. Face Provider 扩展说明（2026-04-09）
+
+当前 hybrid 分支已进一步扩展为 `selectable face provider` 架构：
+
+- `lam`：保留，用于效果对比和 eye-rich facial 基线
+- `a2f-3d-sdk`：新增，作为优先本地 face provider
+
+新增落地约束：
+
+- `Audio2Face-3D SDK` 使用独立 conda env：`a2f3d-sdk310`
+- 本机保持系统 `CUDA 13.2` 不变
+- A2F 使用旁路工具链前缀：
+  - `$HOME/.local/nvidia/a2f3d-sdk/cuda-12.9`
+  - `$HOME/.local/nvidia/a2f3d-sdk/tensorrt-10.13`
+- A2F 输出采用 raw-fidelity 策略：
+  - 不额外合成 eye motion
+  - 不对 `MouthClose` 做仓库级归一化
+  - provider 差异记录到 `face/provider_metadata.json`
+
+新增执行入口：
+
+- `tools/bootstrap_a2f3d_sdk_toolchain.sh`
+- `tools/bootstrap_a2f3d_sdk_env.sh`
+- `tools/run_a2f3d_sdk_inference.py`
+- `tools/run_hybrid_provider_comparison.py`
+
+当前推荐的对比方式：
+
+1. 同一条 wav 共享同一份 `EMAGE` body 输出
+2. 分别运行 `a2f-3d-sdk` 与 `lam`
+3. 各自产出标准 hybrid run 目录与渲染后的 `mp4`
+4. 用 comparison manifest 汇总两条结果以便对比

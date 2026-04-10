@@ -4,6 +4,7 @@
 demo_logs/
 demo_artifacts/
 demo_assets/
+output/
 data/blender_smoke/
 data/blender_renders_smplx/*/work/
 
@@ -36,6 +37,8 @@ third_party/**/.ipynb_checkpoints/
 
 # Keep upstream source snapshots only, not nested repos
 third_party/**/.git
+third_party/Audio2Face-3D-SDK/
+third_party/TensorRT/
 
 # Generic archives
 *.zip

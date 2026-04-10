@@ -15,23 +15,32 @@ from pathlib import Path
 X11_SOCKET_DIR = Path("/tmp/.X11-unix")
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     workspace_root = Path(__file__).resolve().parents[1]
-    parser = argparse.ArgumentParser(description="Render a side-by-side hybrid body + LAM face showcase mp4.")
+    parser = argparse.ArgumentParser(description="Render a side-by-side hybrid body + face-provider showcase mp4.")
     parser.add_argument("--audio", type=Path, required=True)
-    parser.add_argument("--face-json", type=Path, required=True, help="Official LAM bsData-style JSON file.")
+    parser.add_argument("--face-json", type=Path, required=True, help="Face-provider JSON payload.")
     parser.add_argument("--body-video", type=Path, default=None)
     parser.add_argument("--avatar-dir", type=Path, default=workspace_root / "third_party" / "LAM_Audio2Expression" / "assets" / "sample_lam" / "status" / "arkitWithBSData")
     parser.add_argument("--lam-python", type=str, default="/home/vanto/anaconda3/envs/lam-a2e310/bin/python")
     parser.add_argument("--preview-port", type=int, default=7861)
     parser.add_argument("--fps", type=int, default=15)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--face-provider", choices=("lam", "a2f-3d-sdk"), default="lam")
     parser.add_argument("--geckodriver", type=str, default="/snap/bin/geckodriver")
     parser.add_argument("--firefox-binary", type=str, default="/usr/bin/firefox")
     parser.add_argument("--face-width", type=int, default=420)
     parser.add_argument("--face-height", type=int, default=760)
     parser.add_argument("--render-mode", choices=("auto", "browser", "coeff2d"), default="auto")
-    return parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def resolve_render_mode(face_provider: str, render_mode: str) -> str:
+    if render_mode != "auto":
+        return render_mode
+    if face_provider == "a2f-3d-sdk":
+        return "coeff2d"
+    return "browser"
 
 
 def build_face_render_package(
@@ -279,7 +288,7 @@ def _load_face_frames(face_json: Path) -> tuple[list[dict], float]:
     return frames, fps
 
 
-def _draw_lam_face_frame(blendshapes: dict[str, float], width: int, height: int):
+def _draw_face_frame(blendshapes: dict[str, float], width: int, height: int, provider_label: str):
     import cv2
     import numpy as np
 
@@ -366,11 +375,18 @@ def _draw_lam_face_frame(blendshapes: dict[str, float], width: int, height: int)
     if mouth_h > 6:
         cv2.ellipse(img, mouth_center, (mouth_w // 2, mouth_h), 0, 0, 360, (80, 20, 20), 2)
 
-    cv2.putText(img, "LAM Face", (20, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (40, 40, 40), 2, cv2.LINE_AA)
+    cv2.putText(img, provider_label, (20, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (40, 40, 40), 2, cv2.LINE_AA)
     return img
 
 
-def _build_face_video_from_coeffs(face_json: Path, output_video: Path, width: int, height: int, fps: int) -> None:
+def _build_face_video_from_coeffs(
+    face_json: Path,
+    output_video: Path,
+    width: int,
+    height: int,
+    fps: int,
+    provider_label: str,
+) -> None:
     import cv2
 
     frames, source_fps = _load_face_frames(face_json)
@@ -388,19 +404,21 @@ def _build_face_video_from_coeffs(face_json: Path, output_video: Path, width: in
         for target_time in schedule:
             frame_idx = min(len(frames) - 1, int(round(target_time * source_fps)))
             frame = frames[frame_idx]
-            image = _draw_lam_face_frame(frame["blendshapes"], width, height)
+            image = _draw_face_frame(frame["blendshapes"], width, height, provider_label)
             writer.write(image)
     finally:
         writer.release()
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     workspace_root = Path(__file__).resolve().parents[1]
     body_video = args.body_video or _find_body_video(args.audio, workspace_root)
     duration_sec = _load_duration(args.face_json)
     capture_schedule = build_capture_schedule(duration_sec=duration_sec, fps=args.fps)
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    chosen_render_mode = resolve_render_mode(args.face_provider, args.render_mode)
+    provider_label = "A2F-3D Face" if args.face_provider == "a2f-3d-sdk" else "LAM Face"
 
     with tempfile.TemporaryDirectory(prefix="hybrid_showcase_") as temp_dir_str:
         temp_dir = Path(temp_dir_str)
@@ -433,7 +451,7 @@ def main() -> int:
             str(args.face_height),
         ]
         face_video = temp_dir / "face.mp4"
-        if args.render_mode in {"auto", "browser"}:
+        if chosen_render_mode == "browser":
             app_proc = subprocess.Popen(app_command, stdout=app_log.open("w"), stderr=subprocess.STDOUT)
             screenshot_dir = temp_dir / "face_frames"
             try:
@@ -454,7 +472,14 @@ def main() -> int:
             except Exception:
                 if args.render_mode == "browser":
                     raise
-                _build_face_video_from_coeffs(args.face_json, face_video, args.face_width, args.face_height, args.fps)
+                _build_face_video_from_coeffs(
+                    args.face_json,
+                    face_video,
+                    args.face_width,
+                    args.face_height,
+                    args.fps,
+                    provider_label,
+                )
             finally:
                 app_proc.terminate()
                 try:
@@ -463,7 +488,14 @@ def main() -> int:
                     app_proc.kill()
                     app_proc.wait(timeout=5)
         else:
-            _build_face_video_from_coeffs(args.face_json, face_video, args.face_width, args.face_height, args.fps)
+            _build_face_video_from_coeffs(
+                args.face_json,
+                face_video,
+                args.face_width,
+                args.face_height,
+                args.fps,
+                provider_label,
+            )
 
         command = build_ffmpeg_stack_command(
             body_video=body_video,

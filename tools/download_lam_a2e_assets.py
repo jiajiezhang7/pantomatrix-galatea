@@ -38,7 +38,9 @@ def hf_download(repo_root: Path) -> bool:
 
     command = [hf_cli, "download", HF_REPO, "--local-dir", str(repo_root)]
     result = subprocess.run(command, check=False)
-    return result.returncode == 0
+    if result.returncode != 0:
+        return False
+    return all((repo_root / filename).exists() for filename in HF_FILES)
 
 
 def oss_download(repo_root: Path) -> None:

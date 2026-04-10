@@ -23,6 +23,9 @@ def assert_manifest_contract(manifest: dict) -> None:
     assert manifest["frame_count"] > 0
     assert set(manifest["components"]) == REQUIRED_COMPONENTS
     assert manifest["component_aliases"]["lam_face"] == "face_provider"
+    assert "provider_name" in manifest["components"]["face_provider"]
+    assert "raw_payload_path" in manifest["components"]["face_provider"]
+    assert "normalization_policy" in manifest["components"]["face_provider"]
     assert isinstance(manifest["sources"], dict)
     assert isinstance(manifest["alignment_policy"], dict)
 
@@ -46,6 +49,9 @@ def test_hybrid_manifest_contract_uses_body_and_face_provider_components_only():
                 "fps": 30.0,
                 "frame_count": 30,
                 "payload_path": "face/arkit_blendshapes.json",
+                "provider_name": "lam",
+                "raw_payload_path": "face/provider_raw.json",
+                "normalization_policy": "provider-native",
                 "quality_notes": ["includes eye-related ARKit blendshapes from the face provider"],
             },
         },
@@ -92,6 +98,7 @@ def test_hybrid_result_folder_layout_requires_body_face_metrics_and_logs(tmp_pat
     manifest_path = tmp_path / "manifest.json"
     body_path = tmp_path / "body" / "body.npz"
     face_path = tmp_path / "face" / "arkit_blendshapes.json"
+    provider_metadata_path = tmp_path / "face" / "provider_metadata.json"
     metrics_path = tmp_path / "metrics" / "run_metrics.json"
     log_path = tmp_path / "logs" / "pipeline.log"
 
@@ -109,7 +116,12 @@ def test_hybrid_result_folder_layout_requires_body_face_metrics_and_logs(tmp_pat
                 "frame_count": 30,
                 "components": {
                     "emage_body": {"status": "ready"},
-                    "face_provider": {"status": "ready"},
+                    "face_provider": {
+                        "status": "ready",
+                        "provider_name": "lam",
+                        "raw_payload_path": "face/provider_raw.json",
+                        "normalization_policy": "provider-native",
+                    },
                 },
                 "component_aliases": {"lam_face": "face_provider"},
                 "sources": {"body": "EMAGE", "face": "LAM_Audio2Expression"},
@@ -120,8 +132,9 @@ def test_hybrid_result_folder_layout_requires_body_face_metrics_and_logs(tmp_pat
     )
     body_path.write_bytes(b"npz")
     face_path.write_text("[]", encoding="utf-8")
+    provider_metadata_path.write_text("{}", encoding="utf-8")
     metrics_path.write_text("{}", encoding="utf-8")
     log_path.write_text("ok", encoding="utf-8")
 
-    required_paths = [manifest_path, body_path, face_path, metrics_path, log_path]
+    required_paths = [manifest_path, body_path, face_path, provider_metadata_path, metrics_path, log_path]
     assert all(path.exists() for path in required_paths)

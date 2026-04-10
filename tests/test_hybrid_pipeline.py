@@ -145,6 +145,39 @@ def test_pipeline_logs_include_face_provider_only(tmp_path: Path):
     assert set(metrics) == {"timings_sec", "frame_count"}
 
 
+def test_pipeline_writes_face_provider_metadata_file(tmp_path: Path):
+    hybrid = load_tool_module("hybrid_pipeline_test", "hybrid_pipeline.py")
+
+    audio_path = tmp_path / "demo.wav"
+    body_npz = _write_body_npz(tmp_path / "body_source.npz", frame_count=12)
+    face_json = _write_face_json(tmp_path / "face_source.json", frame_count=12)
+    audio_path.write_bytes(b"RIFFdemo")
+
+    exit_code = hybrid.main(
+        [
+            "--audio",
+            str(audio_path),
+            "--output-dir",
+            str(tmp_path / "run"),
+            "--body-npz",
+            str(body_npz),
+            "--face-input-json",
+            str(face_json),
+        ]
+    )
+
+    assert exit_code == 0
+
+    provider_metadata = json.loads((tmp_path / "run" / "face" / "provider_metadata.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "run" / "manifest.json").read_text(encoding="utf-8"))
+
+    assert provider_metadata["provider"] == "lam"
+    assert provider_metadata["normalization_policy"] == "provider-native"
+    assert "provider_name" in manifest["components"]["face_provider"]
+    assert "raw_payload_path" in manifest["components"]["face_provider"]
+    assert manifest["components"]["face_provider"]["provider_name"] == "lam"
+
+
 def test_face_provider_registry_keeps_lam_swappable():
     hybrid = load_tool_module("hybrid_pipeline_test", "hybrid_pipeline.py")
 
@@ -164,6 +197,21 @@ def test_face_provider_registry_keeps_lam_swappable():
 
     assert adapter.provider_name == "lam"
     assert adapter.provider_config.output_json_name == "arkit_blendshapes.json"
+
+    a2f_adapter = hybrid.build_face_provider(
+        provider="a2f-3d-sdk",
+        provider_config=hybrid.FaceProviderConfig(
+            input_json=Path("/tmp/a2f.json"),
+            command="",
+            python_bin="python",
+            repo_root=Path("/tmp/a2f-sdk"),
+            output_json_name="a2f_raw.json",
+            config_file=Path("/tmp/a2f-config.json"),
+        ),
+        audio_path=Path("/tmp/demo.wav"),
+    )
+
+    assert a2f_adapter.provider_name == "a2f-3d-sdk"
 
     with pytest.raises(SystemExit, match="Unsupported face provider"):
         hybrid.build_face_provider(

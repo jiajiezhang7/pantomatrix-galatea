@@ -22,18 +22,21 @@ This repository intentionally does **not** include:
 The `hybrid/lam-emage-pipeline` branch is scoped around a hybrid output contract:
 
 - keep `EMAGE` as the body baseline
-- switch the current main face path to `LAM_Audio2Expression` ARKit coefficients
-- use the eye-related ARKit coefficients already present in `LAM_Audio2Expression` output instead of maintaining a separate eye module
+- add `Audio2Face-3D SDK` as the preferred local face-provider path under `--face-provider a2f-3d-sdk`
+- retain `LAM_Audio2Expression` as the alternate face provider for A/B comparison
+- preserve provider-native face semantics instead of forcing one repository-wide normalization policy
 
 Implementation note:
 
 - the hybrid orchestrator now routes face generation through a provider boundary (`--face-provider`) so `LAM_Audio2Expression` can be replaced later by another face module such as `NVIDIA Audio2Face-3D` without rewriting the body / alignment / manifest pipeline.
 - the preferred provider-facing CLI is now the neutral `--face-*` option family (`--face-input-json`, `--face-command`, `--face-python`, `--face-repo`); legacy `--lam-*` flags remain as compatibility aliases.
+- each run now also writes `face/provider_metadata.json` so downstream tools can distinguish provider-native payloads from aligned hybrid payloads.
 
 The branch-level execution contract, result folder layout, and environment matrix live in:
 
 - [`docs/hybrid_pipeline_guide.md`](docs/hybrid_pipeline_guide.md)
 - [`docs/lam_a2e_integration.md`](docs/lam_a2e_integration.md)
+- [`docs/a2f_3d_sdk_integration.md`](docs/a2f_3d_sdk_integration.md)
 
 Server-side showcase note:
 
@@ -68,10 +71,14 @@ Helper scripts:
 
 - [`tools/bootstrap_emage_env.sh`](tools/bootstrap_emage_env.sh)
 - [`tools/bootstrap_lam_a2e_env.sh`](tools/bootstrap_lam_a2e_env.sh)
+- [`tools/bootstrap_a2f3d_sdk_toolchain.sh`](tools/bootstrap_a2f3d_sdk_toolchain.sh)
+- [`tools/bootstrap_a2f3d_sdk_env.sh`](tools/bootstrap_a2f3d_sdk_env.sh)
 - [`tools/download_emage_assets.py`](tools/download_emage_assets.py)
 - [`tools/bootstrap_blender_smplx_render.sh`](tools/bootstrap_blender_smplx_render.sh)
 - [`tools/render_emage_smplx_video.py`](tools/render_emage_smplx_video.py)
 - [`tools/download_lam_a2e_assets.py`](tools/download_lam_a2e_assets.py)
+- [`tools/run_a2f3d_sdk_inference.py`](tools/run_a2f3d_sdk_inference.py)
+- [`tools/run_hybrid_provider_comparison.py`](tools/run_hybrid_provider_comparison.py)
 - asset redownload reference: [`docs/external-assets-redownload.md`](docs/external-assets-redownload.md)
 
 ## Upstream Source Snapshots
@@ -91,4 +98,5 @@ The exact snapshot commits and local compatibility notes are recorded in:
 - [`docs/hybrid_plan.md`](docs/hybrid_plan.md)
 - [`docs/blender-smplx-render.md`](docs/blender-smplx-render.md)
 - [`docs/hybrid_pipeline_guide.md`](docs/hybrid_pipeline_guide.md)
+- [`docs/a2f_3d_sdk_integration.md`](docs/a2f_3d_sdk_integration.md)
 - [`docs/retarget-handoff-2026-04-09.md`](docs/retarget-handoff-2026-04-09.md)

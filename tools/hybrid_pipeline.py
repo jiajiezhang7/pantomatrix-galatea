@@ -23,17 +23,25 @@ class ComponentRunResult:
         fps: float,
         frame_count: int,
         payload_path: Path | None,
-        quality_notes: list[str],
-        timestamps: list[float],
-        metadata: dict[str, Any],
+        raw_payload_path: Path | None = None,
+        provider_name: str | None = None,
+        normalization_policy: str = "provider-native",
+        provider_notes: list[str] | None = None,
+        quality_notes: list[str] | None = None,
+        timestamps: list[float] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         self.status = status
         self.fps = fps
         self.frame_count = frame_count
         self.payload_path = payload_path
-        self.quality_notes = quality_notes
-        self.timestamps = timestamps
-        self.metadata = metadata
+        self.raw_payload_path = raw_payload_path
+        self.provider_name = provider_name
+        self.normalization_policy = normalization_policy
+        self.provider_notes = provider_notes or []
+        self.quality_notes = quality_notes or []
+        self.timestamps = timestamps or []
+        self.metadata = metadata or {}
 
 
 class FaceProviderConfig:
@@ -79,6 +87,10 @@ class LamFaceAdapter(FaceAdapter):
                 fps=fps,
                 frame_count=len(frames),
                 payload_path=self.provider_config.input_json,
+                raw_payload_path=self.provider_config.input_json,
+                provider_name=self.provider_name,
+                normalization_policy="provider-native",
+                provider_notes=["Precomputed LAM payload is passed through without repository-level renormalization."],
                 quality_notes=["used precomputed face provider json", "provider=lam"],
                 timestamps=[float(frame["time_sec"]) for frame in frames],
                 metadata={"mode": "precomputed", "provider": self.provider_name},
@@ -114,6 +126,10 @@ class LamFaceAdapter(FaceAdapter):
             fps=fps,
             frame_count=len(frames),
             payload_path=provider_json,
+            raw_payload_path=provider_json,
+            provider_name=self.provider_name,
+            normalization_policy="provider-native",
+            provider_notes=["External LAM output is treated as provider-native coefficients."],
             quality_notes=["generated via external face provider command", "provider=lam"],
             timestamps=[float(frame["time_sec"]) for frame in frames],
             metadata={"mode": "generated", "command": formatted_command, "provider": self.provider_name},
@@ -145,6 +161,10 @@ class LamFaceAdapter(FaceAdapter):
             fps=fps,
             frame_count=len(frames),
             payload_path=hybrid_json,
+            raw_payload_path=official_json,
+            provider_name=self.provider_name,
+            normalization_policy="provider-native",
+            provider_notes=["LAM eye-related coefficients are preserved inside the face payload."],
             quality_notes=["generated via official LAM inference", "provider=lam"],
             timestamps=[float(frame["time_sec"]) for frame in frames],
             metadata={
@@ -152,6 +172,91 @@ class LamFaceAdapter(FaceAdapter):
                 "provider": self.provider_name,
                 "official_output_json": str(official_json),
                 "command": command,
+            },
+        )
+
+
+class A2F3DSdkFaceAdapter(FaceAdapter):
+    provider_name = "a2f-3d-sdk"
+
+    def run(self, args: argparse.Namespace, scratch_dir: Path) -> ComponentRunResult:
+        if self.provider_config.input_json:
+            converted_payload = convert_a2f3d_sdk_json_to_face_payload(self.provider_config.input_json)
+            converted_json = scratch_dir / f"{self.provider_name}_precomputed.json"
+            converted_json.write_text(json.dumps(converted_payload, ensure_ascii=True), encoding="utf-8")
+            frames = converted_payload["frames"]
+            fps = float(converted_payload["fps"])
+            return ComponentRunResult(
+                status="ready",
+                fps=fps,
+                frame_count=len(frames),
+                payload_path=converted_json,
+                raw_payload_path=self.provider_config.input_json,
+                provider_name=self.provider_name,
+                normalization_policy="raw-a2f",
+                provider_notes=_default_a2f_provider_notes(),
+                quality_notes=["used precomputed A2F-3D SDK json", "provider=a2f-3d-sdk"],
+                timestamps=[float(frame["time_sec"]) for frame in frames],
+                metadata={"mode": "precomputed", "provider": self.provider_name},
+            )
+
+        if self.provider_config.command:
+            return self._run_external_command(scratch_dir)
+        return self._run_sdk_wrapper(scratch_dir)
+
+    def _run_external_command(self, scratch_dir: Path) -> ComponentRunResult:
+        provider_output_dir = scratch_dir / f"{self.provider_name}_output"
+        provider_output_dir.mkdir(parents=True, exist_ok=True)
+        formatted_command = self.provider_config.command.format(
+            audio=str(self.audio_path),
+            output_dir=str(provider_output_dir),
+            repo=str(self.provider_config.repo_root or ""),
+            python=self.provider_config.python_bin,
+            config=str(self.provider_config.config_file or ""),
+        )
+        subprocess.run(formatted_command, shell=True, check=True)
+        raw_json = provider_output_dir / self.provider_config.output_json_name
+        if not raw_json.exists():
+            raise FileNotFoundError(f"A2F-3D SDK command did not produce expected JSON: {raw_json}")
+        return self._build_sdk_result(raw_json=raw_json)
+
+    def _run_sdk_wrapper(self, scratch_dir: Path) -> ComponentRunResult:
+        if self.provider_config.config_file is None:
+            raise SystemExit("A2F-3D SDK run requires --face-config-file")
+        provider_output_dir = scratch_dir / f"{self.provider_name}_output"
+        provider_output_dir.mkdir(parents=True, exist_ok=True)
+        command, raw_json = build_a2f3d_sdk_command(
+            provider_config=self.provider_config,
+            audio_path=self.audio_path,
+            output_dir=provider_output_dir,
+        )
+        subprocess.run(command, check=True)
+        if not raw_json.exists():
+            raise FileNotFoundError(f"A2F-3D SDK wrapper did not produce expected JSON: {raw_json}")
+        return self._build_sdk_result(raw_json=raw_json, command=command)
+
+    def _build_sdk_result(self, *, raw_json: Path, command: list[str] | None = None) -> ComponentRunResult:
+        converted_payload = convert_a2f3d_sdk_json_to_face_payload(raw_json)
+        hybrid_json = raw_json.parent / "arkit_blendshapes.json"
+        hybrid_json.write_text(json.dumps(converted_payload, ensure_ascii=True), encoding="utf-8")
+        frames = converted_payload["frames"]
+        fps = float(converted_payload["fps"])
+        return ComponentRunResult(
+            status="ready",
+            fps=fps,
+            frame_count=len(frames),
+            payload_path=hybrid_json,
+            raw_payload_path=raw_json,
+            provider_name=self.provider_name,
+            normalization_policy="raw-a2f",
+            provider_notes=_default_a2f_provider_notes(),
+            quality_notes=["generated via A2F-3D SDK wrapper", "provider=a2f-3d-sdk"],
+            timestamps=[float(frame["time_sec"]) for frame in frames],
+            metadata={
+                "mode": "sdk-run",
+                "provider": self.provider_name,
+                "raw_output_json": str(raw_json),
+                "command": command or [],
             },
         )
 
@@ -215,6 +320,7 @@ def build_face_provider(
 ) -> FaceAdapter:
     registry = {
         "lam": LamFaceAdapter,
+        "a2f-3d-sdk": A2F3DSdkFaceAdapter,
     }
     adapter_cls = registry.get(provider)
     if adapter_cls is None:
@@ -263,7 +369,10 @@ def _ensure_output_layout(output_dir: Path) -> dict[str, Path]:
 def _relative_to_output(output_dir: Path, path: Path | None) -> str | None:
     if path is None:
         return None
-    return str(path.relative_to(output_dir))
+    try:
+        return str(path.relative_to(output_dir))
+    except ValueError:
+        return str(path)
 
 
 def _load_face_payload(face_json: Path) -> tuple[list[dict[str, Any]], float]:
@@ -301,6 +410,14 @@ def _normalize_face_frames(frames: list[dict[str, Any]]) -> tuple[list[dict[str,
 
 def _extract_eye_blendshape_names(blendshape_names: list[str]) -> list[str]:
     return [name for name in blendshape_names if name.startswith("eye")]
+
+
+def _default_a2f_provider_notes() -> list[str]:
+    return [
+        "A2F-3D output is preserved in raw-fidelity mode without repository-level renormalization.",
+        "Eye-look coefficients may be omitted or remain zero in provider-native A2F output.",
+        "MouthClose follows NVIDIA semantics and is not reinterpreted by this repository.",
+    ]
 
 
 def convert_lam_official_json_to_face_payload(official_json_path: Path) -> dict[str, Any]:
@@ -342,6 +459,59 @@ def convert_lam_official_json_to_face_payload(official_json_path: Path) -> dict[
     }
 
 
+def convert_a2f3d_sdk_json_to_face_payload(raw_json_path: Path) -> dict[str, Any]:
+    payload = json.loads(raw_json_path.read_text(encoding="utf-8"))
+    metadata = payload.get("metadata", {})
+    frames = payload.get("frames", [])
+    if not frames:
+        raise ValueError(f"A2F-3D SDK JSON missing frames: {raw_json_path}")
+
+    names = payload.get("names") or metadata.get("blendshape_names")
+    fps = payload.get("fps") or metadata.get("fps")
+    if fps is None:
+        fps = _infer_fps_from_frames(
+            [
+                {
+                    "time_sec": float(frame.get("time_sec", frame.get("time", 0.0))),
+                    "blendshapes": frame.get("blendshapes", {}),
+                }
+                for frame in frames
+            ]
+        )
+
+    converted_frames = []
+    inferred_names: set[str] = set(names or [])
+    for frame_idx, frame in enumerate(frames):
+        if "blendshapes" in frame:
+            blendshapes = {str(name): float(value) for name, value in frame["blendshapes"].items()}
+        else:
+            weights = frame.get("weights")
+            if not names or weights is None or len(weights) != len(names):
+                raise ValueError(f"A2F-3D SDK JSON missing usable blendshape payload: {raw_json_path}")
+            blendshapes = {name: float(value) for name, value in zip(names, weights)}
+        inferred_names.update(blendshapes)
+        converted_frames.append(
+            {
+                "frame": frame_idx,
+                "time_sec": float(frame.get("time_sec", frame.get("time", frame_idx / float(fps)))),
+                "blendshapes": blendshapes,
+            }
+        )
+
+    blendshape_names = sorted(inferred_names)
+    return {
+        "provider": "a2f-3d-sdk",
+        "source_face_json": str(raw_json_path),
+        "fps": float(fps),
+        "frame_count": len(converted_frames),
+        "frames": converted_frames,
+        "names": blendshape_names,
+        "eye_blendshape_names": _extract_eye_blendshape_names(blendshape_names),
+        "normalization_policy": str(metadata.get("normalization_policy", "raw-a2f")),
+        "provider_notes": metadata.get("notes") or _default_a2f_provider_notes(),
+    }
+
+
 def build_lam_official_command(
     *,
     provider_config: FaceProviderConfig,
@@ -370,6 +540,32 @@ def build_lam_official_command(
         f"audio_input={resolved_audio}",
         "ex_vol=False",
     ]
+    return command, output_json
+
+
+def build_a2f3d_sdk_command(
+    *,
+    provider_config: FaceProviderConfig,
+    audio_path: Path,
+    output_dir: Path,
+) -> tuple[list[str], Path]:
+    if provider_config.config_file is None:
+        raise SystemExit("A2F-3D SDK run requires --face-config-file")
+
+    workspace_root = Path(__file__).resolve().parents[1]
+    output_json = output_dir / provider_config.output_json_name
+    command = [
+        provider_config.python_bin or "python",
+        str(workspace_root / "tools" / "run_a2f3d_sdk_inference.py"),
+        "--audio",
+        str(audio_path.resolve()),
+        "--output-json",
+        str(output_json),
+        "--config-file",
+        str(provider_config.config_file),
+    ]
+    if provider_config.repo_root is not None:
+        command.extend(["--sdk-root", str(provider_config.repo_root)])
     return command, output_json
 
 
@@ -505,12 +701,26 @@ def _write_face_payload(
     return output_path, source_fps, len(aligned_frames), blendshape_names
 
 
+def _write_provider_metadata(output_path: Path, result: ComponentRunResult, output_dir: Path) -> None:
+    payload = {
+        "provider": result.provider_name,
+        "normalization_policy": result.normalization_policy,
+        "raw_payload_path": _relative_to_output(output_dir, result.raw_payload_path),
+        "notes": result.provider_notes,
+        "metadata": result.metadata,
+    }
+    output_path.write_text(json.dumps(payload, ensure_ascii=True), encoding="utf-8")
+
+
 def _component_manifest_entry(result: ComponentRunResult, output_dir: Path) -> dict[str, Any]:
     return {
         "status": result.status,
         "fps": result.fps,
         "frame_count": result.frame_count,
         "payload_path": _relative_to_output(output_dir, result.payload_path),
+        "provider_name": result.provider_name,
+        "raw_payload_path": _relative_to_output(output_dir, result.raw_payload_path),
+        "normalization_policy": result.normalization_policy,
         "quality_notes": result.quality_notes,
     }
 
@@ -556,6 +766,7 @@ def main(argv: list[str] | None = None) -> int:
             timeline,
             layout["face"] / "arkit_blendshapes.json",
         )
+        _write_provider_metadata(layout["face"] / "provider_metadata.json", face_result, args.output_dir)
         timings["alignment"] = time.perf_counter() - alignment_start
 
         body_component = ComponentRunResult(
@@ -572,6 +783,10 @@ def main(argv: list[str] | None = None) -> int:
             fps=args.target_fps,
             frame_count=face_frame_count,
             payload_path=face_output_path,
+            raw_payload_path=face_result.raw_payload_path,
+            provider_name=face_result.provider_name,
+            normalization_policy=face_result.normalization_policy,
+            provider_notes=face_result.provider_notes,
             quality_notes=face_result.quality_notes
             + [f"source_fps={face_source_fps}", f"eye_blendshape_count={len(_extract_eye_blendshape_names(face_blendshape_names))}"],
             timestamps=list(timeline),
